@@ -27,6 +27,29 @@ def calculateGterms(cosine2D, pairdist3D):
     coeff = np.array([G4,G3,G2,G1,G0])
     return coeff
 
+def solve_a(xs, pairdist3D, cosine2D):
+    Cab, Cac, Cbc = cosine2D
+    Rab, Rac, Rbc = pairdist3D
+    ret_xas = []
+    for x in xs:
+        coeff = np.array([1+x**2-2*x*Cab, 0.0, -Rab**2])
+        root_as = np.roots(coeff)
+        for a in root_as:
+            ret_xas.append((x, a))
+    return ret_xas
+
+def solve_y(xas, pairdist3D, cosine2D):
+    Cab, Cac, Cbc = cosine2D
+    Rab, Rac, Rbc = pairdist3D
+    ret_xyas = []
+    for x,a in xas:
+        #print('a', a, 'x',x)
+        coeff = np.array([a**2, -2*a**2*Cac, a**2-Rac**2])
+        root_ys = np.roots(coeff)
+        for y in root_ys:
+            ret_xyas.append((x,y,a))
+    return ret_xyas
+
 def p3psolver(points2D, points3D, cameraMatrix, distCoeffs=None):
     points2D = points2D[:3]
     points3D = points3D[:3]
@@ -42,10 +65,14 @@ def p3psolver(points2D, points3D, cameraMatrix, distCoeffs=None):
     cosine2D = 1-spatial.distance.pdist(unit_v, metric='cosine')
     ### find Rab, Rac, Rbc
     pairdist3D = spatial.distance.pdist(points3D, metric='euclidean')
+    ### solve Gterms polynomial
     coeff = calculateGterms(cosine2D, pairdist3D)
-    ### solve polynomial
     root_x = np.roots(coeff)
     print(root_x)
+    ### solve a
+    root_as = solve_a(root_x, pairdist3D, cosine2D)
+    ### solve y
+    solution_xya = solve_y(root_as, pairdist3D, cosine2D)
     exit(0)
 
 if __name__ == '__main__':
