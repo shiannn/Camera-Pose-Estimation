@@ -50,6 +50,86 @@ def solve_y(xas, pairdist3D, cosine2D):
             ret_xyas.append((x,y,a))
     return ret_xyas
 
+def findTwith3planes(solution_xya, points3D, unit_v):
+    def transform2originxy(points3D):
+        x1,x2,x3 = points3D
+        d12 = np.linalg.norm(x1-x2,ord=2)
+        d23 = np.linalg.norm(x2-x3,ord=2)
+        d13 = np.linalg.norm(x1-x3,ord=2)
+        f1 = np.array([0.,0.,0.])
+        f2 = np.array([d12,0.,0.])
+        cos = 1-spatial.distance.cosine(x2-x1,x3-x1)
+        sin = np.sin(np.arccos(cos))
+        f3 = np.array([d13*cos,d13*sin,0.])
+        ### check
+        df12 = np.linalg.norm(f1-f2,ord=2)
+        df23 = np.linalg.norm(f2-f3,ord=2)
+        df13 = np.linalg.norm(f1-f3,ord=2)
+        assert abs(df12 - d12) < 1e-3 and abs(df23 - d23) < 1e-3 and abs(df13 - d13) < 1e-3
+        return np.array([f1,f2,f3])
+
+    def getRigidTransform(A, B):
+        ### return RigidTransform from A to B
+        assert A.shape[1] == 3 and B.shape[1] == 3
+        centroidA = A.mean(axis=0, keepdims=True)
+        centroidB = B.mean(axis=0, keepdims=True)
+        ### H is an covariance matrix 3xN matmul Nx3
+        H = np.matmul((A - centroidA).T, (B-centroidB))
+        U,S,Vh = np.linalg.svd(H)
+        R = np.matmul(Vh.T,U.T)
+        if np.linalg.det(R) < 0:
+            #print("det(R) < R, reflection detected!, correcting for it ...")
+            Vh[2,:] *= -1
+            #R = Vt.T @ U.T
+            R = np.matmul(Vh.T,U.T)
+        T = centroidB.T - np.matmul(R, centroidA.T)
+        ### check
+        assert (B-(np.matmul(R, A.T) + T).T).mean() < 1e-5
+        return R,T
+    
+    def trilaterationXY(r1,r2,r3,U,Vx,Vy):
+        x = (r1**2-r2**2+U**2)/(2*U)
+        y = (r1**2-r3**2+Vx**2+Vy**2-2*Vx*x)/(2*Vy)
+        z = np.sqrt(r1**2-x**2-y**2)
+        return np.array([x,y,z])
+
+    def solveTrilateration(radius, points3D, unit_v):
+        x1,x2,x3 = points3D
+        a,b,c = radius
+        v1,v2,v3 = unit_v
+        points3D_XYplane = transform2originxy(points3D)
+        Rotate,Translation = getRigidTransform(points3D, points3D_XYplane)
+        ### Translation 3x1
+        #print(points3D_XYplane)
+        TpointXY = trilaterationXY(
+            a,b,c,
+            points3D_XYplane[1,0],points3D_XYplane[2,0],points3D_XYplane[2,1]
+        )
+        #print(TpointXY)
+        ### check
+        d1 = np.linalg.norm(TpointXY-points3D_XYplane[0],ord=2)
+        d2 = np.linalg.norm(TpointXY-points3D_XYplane[1],ord=2)
+        d3 = np.linalg.norm(TpointXY-points3D_XYplane[2],ord=2)
+        #print('abs(d1-a), abs(d2-b), abs(d3-c)', abs(d1-a), abs(d2-b), abs(d3-c))
+        #assert abs(d1-a)<1e-3 and abs(d2-b)<1e-3 and abs(d3-c)<1e-3
+        ### inverse TpointXY back to 3d space
+        Tpoint = np.matmul(np.linalg.inv(Rotate), (TpointXY.reshape(-1,1) - Translation))
+        Tpoint = Tpoint.squeeze()
+        ### check in 3D
+        d31 = np.linalg.norm(Tpoint-x1,ord=2)
+        d32 = np.linalg.norm(Tpoint-x2,ord=2)
+        d33 = np.linalg.norm(Tpoint-x3,ord=2)
+        #assert abs(d31-a)<1e-3 and abs(d32-b)<1e-3 and abs(d33-c)<1e-3
+        error = (abs(d31-a)+abs(d32-b)+abs(d33-c))/3.
+        return Tpoint, error
+        
+    for x,y,a in solution_xya:
+        #if np.isreal(x) and np.isreal(y) and np.isreal(a):
+        b = x*a
+        c = y*a
+        Tpoint, error = solveTrilateration((a,b,c), points3D, unit_v)
+        print(Tpoint, error)
+    exit(0)
 def p3psolver(points2D, points3D, cameraMatrix, distCoeffs=None):
     points2D = points2D[:3]
     points3D = points3D[:3]
@@ -73,7 +153,7 @@ def p3psolver(points2D, points3D, cameraMatrix, distCoeffs=None):
     root_as = solve_a(root_x, pairdist3D, cosine2D)
     ### solve y
     solution_xya = solve_y(root_as, pairdist3D, cosine2D)
-    exit(0)
+    findTwith3planes(solution_xya, points3D, unit_v)
 
 if __name__ == '__main__':
     cameraMatrix = np.array([[1868.27,0,540],[0,1869.18,960],[0,0,1]])
