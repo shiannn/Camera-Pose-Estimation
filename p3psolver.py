@@ -50,7 +50,7 @@ def solve_y(xas, pairdist3D, cosine2D):
             ret_xyas.append((x,y,a))
     return ret_xyas
 
-def findTwith3planes(solution_xya, points3D, unit_v):
+def findTpoint(solution_xya, points3D, unit_v):
     def transform2originxy(points3D):
         x1,x2,x3 = points3D
         d12 = np.linalg.norm(x1-x2,ord=2)
@@ -91,7 +91,7 @@ def findTwith3planes(solution_xya, points3D, unit_v):
         x = (r1**2-r2**2+U**2)/(2*U)
         y = (r1**2-r3**2+Vx**2+Vy**2-2*Vx*x)/(2*Vy)
         z = np.sqrt(r1**2-x**2-y**2)
-        return np.array([x,y,z])
+        return [np.array([x,y,z]),np.array([x,y,-z])]
 
     def solveTrilateration(radius, points3D, unit_v):
         x1,x2,x3 = points3D
@@ -101,39 +101,45 @@ def findTwith3planes(solution_xya, points3D, unit_v):
         Rotate,Translation = getRigidTransform(points3D, points3D_XYplane)
         ### Translation 3x1
         #print(points3D_XYplane)
-        TpointXY = trilaterationXY(
+        TpointXYs = trilaterationXY(
             a,b,c,
             points3D_XYplane[1,0],points3D_XYplane[2,0],points3D_XYplane[2,1]
         )
         #print(TpointXY)
         ### check
-        d1 = np.linalg.norm(TpointXY-points3D_XYplane[0],ord=2)
-        d2 = np.linalg.norm(TpointXY-points3D_XYplane[1],ord=2)
-        d3 = np.linalg.norm(TpointXY-points3D_XYplane[2],ord=2)
-        #print('abs(d1-a), abs(d2-b), abs(d3-c)', abs(d1-a), abs(d2-b), abs(d3-c))
-        #assert abs(d1-a)<1e-3 and abs(d2-b)<1e-3 and abs(d3-c)<1e-3
+        for TpointXY in TpointXYs:
+            d1 = np.linalg.norm(TpointXY-points3D_XYplane[0],ord=2)
+            d2 = np.linalg.norm(TpointXY-points3D_XYplane[1],ord=2)
+            d3 = np.linalg.norm(TpointXY-points3D_XYplane[2],ord=2)
+            #print('abs(d1-a), abs(d2-b), abs(d3-c)', abs(d1-a), abs(d2-b), abs(d3-c))
+            #assert abs(d1-a)<1e-3 and abs(d2-b)<1e-3 and abs(d3-c)<1e-3
+        Tpoint_Errors = []
         ### inverse TpointXY back to 3d space
-        Tpoint = np.matmul(np.linalg.inv(Rotate), (TpointXY.reshape(-1,1) - Translation))
-        Tpoint = Tpoint.squeeze()
-        ### check in 3D
-        d31 = np.linalg.norm(Tpoint-x1,ord=2)
-        d32 = np.linalg.norm(Tpoint-x2,ord=2)
-        d33 = np.linalg.norm(Tpoint-x3,ord=2)
-        #assert abs(d31-a)<1e-3 and abs(d32-b)<1e-3 and abs(d33-c)<1e-3
-        error = (abs(d31-a)+abs(d32-b)+abs(d33-c))/3.
-        return Tpoint, error
-        
+        for TpointXY in TpointXYs:
+            Tpoint = np.matmul(np.linalg.inv(Rotate), (TpointXY.reshape(-1,1) - Translation))
+            Tpoint = Tpoint.squeeze()
+            ### check in 3D
+            d31 = np.linalg.norm(Tpoint-x1,ord=2)
+            d32 = np.linalg.norm(Tpoint-x2,ord=2)
+            d33 = np.linalg.norm(Tpoint-x3,ord=2)
+            #assert abs(d31-a)<1e-3 and abs(d32-b)<1e-3 and abs(d33-c)<1e-3
+            error = (abs(d31-a)+abs(d32-b)+abs(d33-c))/3.
+            Tpoint_Errors.append((Tpoint,error))
+        return Tpoint_Errors
+    Tpoints = []
     for x,y,a in solution_xya:
         #if np.isreal(x) and np.isreal(y) and np.isreal(a):
         b = x*a
         c = y*a
-        Tpoint, error = solveTrilateration((a,b,c), points3D, unit_v)
-        print(Tpoint, error)
-    exit(0)
+        Tpoint_Errors = solveTrilateration((a,b,c), points3D, unit_v)
+        for Tpoint, error in Tpoint_Errors:
+            if error < 1e-3:
+                Tpoints.append(Tpoint)
+    return Tpoints
+
 def p3psolver(points2D, points3D, cameraMatrix, distCoeffs=None):
-    points2D = points2D[:3]
-    points3D = points3D[:3]
-    assert points2D.shape[0] == points3D.shape[0] and points3D.shape[0] == 3
+    assert len(points2D.shape) == 2 and points2D.shape[0] == 3
+    assert len(points3D.shape) == 2 and points3D.shape[0] == 3
     homo2D = np.concatenate([points2D, np.ones((points2D.shape[0],1))], axis=1)
     homo3D = np.concatenate([points3D, np.ones((points3D.shape[0],1))], axis=1)
     print(homo2D.shape)
@@ -148,15 +154,60 @@ def p3psolver(points2D, points3D, cameraMatrix, distCoeffs=None):
     ### solve Gterms polynomial
     coeff = calculateGterms(cosine2D, pairdist3D)
     root_x = np.roots(coeff)
-    print(root_x)
     ### solve a
     root_as = solve_a(root_x, pairdist3D, cosine2D)
     ### solve y
     solution_xya = solve_y(root_as, pairdist3D, cosine2D)
-    findTwith3planes(solution_xya, points3D, unit_v)
+    Tpoints = findTpoint(solution_xya, points3D, unit_v)
+    ### calculated lambda with all possible Tpoints
+    lambdas = []
+    for Tpoint in Tpoints:
+        right = points3D-np.expand_dims(Tpoint, axis=0)
+        right_norm = np.linalg.norm(right, ord=2, axis=1)
+        #print(right)
+        #print(right_norm)
+        left_norm = np.linalg.norm(v, ord=2, axis=1)
+        #print(left_norm)
+        lamb = np.divide(right_norm, left_norm)
+        #print(lamb)
+        lambdas.append(lamb)
+    #print(lambdas)
+    ### calculate rotation matrix R
+    Rotation_Matrixs = []
+    FinalTs = []
+    #print(Tpoints)
+    for lamb, Tpoint in zip(lambdas, Tpoints):
+        left_matrix = lamb.reshape(-1,1)*v
+        right_matrix = points3D-np.expand_dims(Tpoint, axis=0)
+        #print(left_matrix)
+        #print(right_matrix)
+        Rotation_Matrix = np.matmul(left_matrix.T,np.linalg.inv(right_matrix.T))
+        ### check Rotation Matrix
+        if not abs(np.linalg.det(Rotation_Matrix) - 1) < 1e-3:
+            continue
+        orthonormal = np.matmul(Rotation_Matrix.T, Rotation_Matrix)
+        if not abs(orthonormal - np.eye(orthonormal.shape[0])).mean() < 1e-3:
+            continue
+        Rotation_Matrixs.append(Rotation_Matrix)
+        ### transformation due to the notation difference on slide & hw
+        TransTpoint = -np.matmul(Rotation_Matrix, Tpoint)
+        FinalTs.append(TransTpoint)
+    #print(FinalTs)
+    #print(Rotation_Matrixs)
+    return FinalTs, Rotation_Matrixs
 
 if __name__ == '__main__':
     cameraMatrix = np.array([[1868.27,0,540],[0,1869.18,960],[0,0,1]])
     points2D = np.load('points2D.npy')
     points3D = np.load('points3D.npy')
-    p3psolver(points2D, points3D, cameraMatrix)
+    FinalTs, Rotation_Matrixs = p3psolver(points2D[:3], points3D[:3], cameraMatrix)
+    for trans, rotation_Matrix in zip(FinalTs, Rotation_Matrixs):
+        rot_object = spatial.transform.Rotation.from_matrix(rotation_Matrix)
+        rotq = rot_object.as_quat()
+        ### check result
+        outer = np.matmul(rotation_Matrix, points3D.T).T + trans
+        onimg = np.matmul(cameraMatrix, outer.T).T
+        onimg = onimg / onimg[:,2:]
+        print(onimg)
+        print(points2D)
+        #np.matmul(rotation_Matrix, points3D.T) + trans

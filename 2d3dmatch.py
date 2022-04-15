@@ -57,8 +57,10 @@ def main():
     ### p3p solver
     cameraMatrix = np.array([[1868.27,0,540],[0,1869.18,960],[0,0,1]])    
     distCoeffs = np.array([0.0847023,-0.192929,-0.000201144,-0.000725352])
-    p3psolver(points2D, points3D, cameraMatrix=cameraMatrix, distCoeffs=distCoeffs)
+    FinalTs, Rotation_Matrixs = p3psolver(points2D, points3D, cameraMatrix=cameraMatrix, distCoeffs=distCoeffs)
     ### get ground_truth
+    print(images_df)
+    print(images_df.loc[images_df["IMAGE_ID"] == idx])
 
 
 def get2D3Dcorrespondence(query,model):
