@@ -57,10 +57,31 @@ def main():
     ### p3p solver
     cameraMatrix = np.array([[1868.27,0,540],[0,1869.18,960],[0,0,1]])    
     distCoeffs = np.array([0.0847023,-0.192929,-0.000201144,-0.000725352])
-    FinalTs, Rotation_Matrixs = p3psolver(points2D, points3D, cameraMatrix=cameraMatrix, distCoeffs=distCoeffs)
+    FinalTs, Rotation_Matrixs = p3psolver(points2D[:3], points3D[:3], cameraMatrix=cameraMatrix, distCoeffs=distCoeffs)
+    ### p3psolver return up to 4 solutions, select the best
+    best_rotation_Matrix = None
+    best_trans = None
+    best_error = np.inf
+    for trans, rotation_Matrix in zip(FinalTs, Rotation_Matrixs):
+        outer = np.matmul(rotation_Matrix, points3D.T).T + trans
+        onimg = np.matmul(cameraMatrix, outer.T).T
+        onimg = onimg / onimg[:,2:]
+        error = abs(onimg[:,:2] - points2D).mean()
+        print(error.mean())
+        if best_rotation_Matrix is None or error < best_error:
+            best_error = error
+            best_rotation_Matrix = rotation_Matrix
+            best_trans = trans
+    best_quaternion = R.from_matrix(best_rotation_Matrix).as_quat()
+    print(best_trans)
+    print(best_quaternion)
     ### get ground_truth
-    print(images_df)
-    print(images_df.loc[images_df["IMAGE_ID"] == idx])
+    ground_truth = images_df.loc[images_df["IMAGE_ID"] == idx]
+    rotq_gt = ground_truth[["QX","QY","QZ","QW"]].values
+    tvec_gt = ground_truth[["TX","TY","TZ"]].values
+    print(tvec_gt)
+    print(rotq_gt)
+    exit(0)
 
 
 def get2D3Dcorrespondence(query,model):
