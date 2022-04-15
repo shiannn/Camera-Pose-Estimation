@@ -42,7 +42,7 @@ def main():
     desc_df = average_desc(train_df, points3D_df)
     kp_model = np.array(desc_df["XYZ"].to_list()) #### kp_model [num_3D_points, 3] [111519, 3]
     desc_model = np.array(desc_df["DESCRIPTORS"].to_list()).astype(np.float32) #### desc_model [num_3D_points, 128D] [111519, 128]
-    print(kp_model.shape)
+    #print(kp_model.shape)
     ### get 2D query image & 2D descriptors
     rimg, kp_query, desc_query = get2DImgDescriptor(idx, images_df, point_desc_df)
     #### single image shape 1920* 1080
@@ -67,22 +67,39 @@ def main():
         onimg = np.matmul(cameraMatrix, outer.T).T
         onimg = onimg / onimg[:,2:]
         error = abs(onimg[:,:2] - points2D).mean()
-        print(error.mean())
+        #print(error.mean())
         if best_rotation_Matrix is None or error < best_error:
             best_error = error
             best_rotation_Matrix = rotation_Matrix
             best_trans = trans
     best_quaternion = R.from_matrix(best_rotation_Matrix).as_quat()
-    print(best_trans)
-    print(best_quaternion)
     ### get ground_truth
     ground_truth = images_df.loc[images_df["IMAGE_ID"] == idx]
     rotq_gt = ground_truth[["QX","QY","QZ","QW"]].values
     tvec_gt = ground_truth[["TX","TY","TZ"]].values
-    print(tvec_gt)
-    print(rotq_gt)
-    exit(0)
+    ### calculate error
+    pose_error, rotation_error = calculate_error(best_trans, tvec_gt, best_quaternion, rotq_gt)
+    print('pose_error', pose_error)
+    print('rotation_error', rotation_error)
 
+def calculate_error(pose, gt_pose, quaternion, gt_quaternion):
+    def axis_angle_representation(quaternion):
+        qi, qj, qk, qr = quaternion
+        axis = np.array([qi, qj, qk]) / np.sqrt(qi**2+qj**2+qk**2)
+        theta = 2*np.arctan2(np.sqrt(qi**2+qj**2+qk**2), qr)
+        return axis, theta
+    gt_pose = gt_pose.squeeze()
+    gt_quaternion = gt_quaternion.squeeze()
+    ### calculate pose error
+    pose_error = np.linalg.norm(pose - gt_pose, ord=2)
+    ### calculate rotation error
+    axis, theta = axis_angle_representation(quaternion)
+    axis_gt, theta_gt = axis_angle_representation(gt_quaternion)
+    rotation_error = abs(theta-theta_gt)
+    #print(theta, theta_gt)
+    #print(pose_error)
+    #print(rotation_error)
+    return pose_error, rotation_error
 
 def get2D3Dcorrespondence(query,model):
     kp_query, desc_query = query
