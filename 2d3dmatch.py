@@ -35,52 +35,53 @@ def get2DImgDescriptor(idx, images_df, point_desc_df):
     return rimg, kp_query, desc_query
 
 def main():
-    idx = 200
     ### load data
     train_df, points3D_df, images_df, point_desc_df = load_data()
     ### get 3D points & 3D descriptors
     desc_df = average_desc(train_df, points3D_df)
     kp_model = np.array(desc_df["XYZ"].to_list()) #### kp_model [num_3D_points, 3] [111519, 3]
     desc_model = np.array(desc_df["DESCRIPTORS"].to_list()).astype(np.float32) #### desc_model [num_3D_points, 128D] [111519, 128]
-    #print(kp_model.shape)
-    ### get 2D query image & 2D descriptors
-    rimg, kp_query, desc_query = get2DImgDescriptor(idx, images_df, point_desc_df)
-    #### single image shape 1920* 1080
-    #### kp_query [num_2D_points, 2] [4276, 2]
-    #### desc_query [num_2D_points, 128D] [4276, 128]
-    ### get 2D-3D correspondence
-    points2D, points3D = get2D3Dcorrespondence((kp_query, desc_query), (kp_model, desc_model))
-    #### points2D [num_correspondence, 2]
-    #### points3D [num_correspondence, 3]
-    np.save('points2D.npy', points2D)
-    np.save('points3D.npy', points3D)
-    ### p3p solver
+    
     cameraMatrix = np.array([[1868.27,0,540],[0,1869.18,960],[0,0,1]])    
     distCoeffs = np.array([0.0847023,-0.192929,-0.000201144,-0.000725352])
-    FinalTs, Rotation_Matrixs = p3psolver(points2D[:3], points3D[:3], cameraMatrix=cameraMatrix, distCoeffs=distCoeffs)
-    ### p3psolver return up to 4 solutions, select the best
-    best_rotation_Matrix = None
-    best_trans = None
-    best_error = np.inf
-    for trans, rotation_Matrix in zip(FinalTs, Rotation_Matrixs):
-        outer = np.matmul(rotation_Matrix, points3D.T).T + trans
-        onimg = np.matmul(cameraMatrix, outer.T).T
-        onimg = onimg / onimg[:,2:]
-        error = abs(onimg[:,:2] - points2D).mean()
-        #print(error.mean())
-        if best_rotation_Matrix is None or error < best_error:
-            best_error = error
-            best_rotation_Matrix = rotation_Matrix
-            best_trans = trans
-    best_quaternion = R.from_matrix(best_rotation_Matrix).as_quat()
-    ### get ground_truth
-    ground_truth = images_df.loc[images_df["IMAGE_ID"] == idx]
-    rotq_gt = ground_truth[["QX","QY","QZ","QW"]].values
-    tvec_gt = ground_truth[["TX","TY","TZ"]].values
-    ### calculate error
-    pose_error, rotation_error = calculate_error(best_trans, tvec_gt, best_quaternion, rotq_gt)
-    print('pose_error', pose_error)
-    print('rotation_error', rotation_error)
+    ### iterate over all validation query images
+    for idx in range(200,230):
+        ### get 2D query image & 2D descriptors
+        rimg, kp_query, desc_query = get2DImgDescriptor(idx, images_df, point_desc_df)
+        #### single image shape 1920* 1080
+        #### kp_query [num_2D_points, 2] [4276, 2]
+        #### desc_query [num_2D_points, 128D] [4276, 128]
+        ### get 2D-3D correspondence
+        points2D, points3D = get2D3Dcorrespondence((kp_query, desc_query), (kp_model, desc_model))
+        #### points2D [num_correspondence, 2]
+        #### points3D [num_correspondence, 3]
+        np.save('points2D.npy', points2D)
+        np.save('points3D.npy', points3D)
+        ### p3p solver
+        FinalTs, Rotation_Matrixs = p3psolver(points2D[:3], points3D[:3], cameraMatrix=cameraMatrix, distCoeffs=distCoeffs)
+        ### p3psolver return up to 4 solutions, select the best
+        best_rotation_Matrix = None
+        best_trans = None
+        best_error = np.inf
+        for trans, rotation_Matrix in zip(FinalTs, Rotation_Matrixs):
+            outer = np.matmul(rotation_Matrix, points3D.T).T + trans
+            onimg = np.matmul(cameraMatrix, outer.T).T
+            onimg = onimg / onimg[:,2:]
+            error = abs(onimg[:,:2] - points2D).mean()
+            #print(error.mean())
+            if best_rotation_Matrix is None or error < best_error:
+                best_error = error
+                best_rotation_Matrix = rotation_Matrix
+                best_trans = trans
+        best_quaternion = R.from_matrix(best_rotation_Matrix).as_quat()
+        ### get ground_truth
+        ground_truth = images_df.loc[images_df["IMAGE_ID"] == idx]
+        rotq_gt = ground_truth[["QX","QY","QZ","QW"]].values
+        tvec_gt = ground_truth[["TX","TY","TZ"]].values
+        ### calculate error
+        pose_error, rotation_error = calculate_error(best_trans, tvec_gt, best_quaternion, rotq_gt)
+        print('pose_error', pose_error)
+        print('rotation_error', rotation_error)
 
 def calculate_error(pose, gt_pose, quaternion, gt_quaternion):
     def axis_angle_representation(quaternion):
@@ -93,12 +94,12 @@ def calculate_error(pose, gt_pose, quaternion, gt_quaternion):
     ### calculate pose error
     pose_error = np.linalg.norm(pose - gt_pose, ord=2)
     ### calculate rotation error
-    axis, theta = axis_angle_representation(quaternion)
-    axis_gt, theta_gt = axis_angle_representation(gt_quaternion)
-    rotation_error = abs(theta-theta_gt)
-    #print(theta, theta_gt)
-    #print(pose_error)
-    #print(rotation_error)
+    output_matrix = R.from_quat(quaternion).as_matrix()
+    gt_matrix = R.from_quat(gt_quaternion).as_matrix()
+    relative_rot_matrix = np.matmul(gt_matrix, output_matrix.T)
+    relative_quat = R.from_matrix(relative_rot_matrix).as_quat()
+    _, rotation_error = axis_angle_representation(relative_quat)
+    
     return pose_error, rotation_error
 
 def get2D3Dcorrespondence(query,model):
@@ -127,7 +128,7 @@ def get2D3Dcorrespondence(query,model):
 
 if __name__ == '__main__':
     main()
-
+"""
 # Find correspondance and solve pnp
 retval, rvec, tvec, inliers = pnpsolver((kp_query, desc_query),(kp_model, desc_model))
 rotq = R.from_rotvec(rvec.reshape(1,3)).as_quat()
@@ -137,4 +138,4 @@ tvec = tvec.reshape(1,3)
 ground_truth = images_df.loc[images_df["IMAGE_ID"]==idx]
 rotq_gt = ground_truth[["QX","QY","QZ","QW"]].values
 tvec_gt = ground_truth[["TX","TY","TZ"]].values
-
+"""

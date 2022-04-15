@@ -142,8 +142,8 @@ def p3psolver(points2D, points3D, cameraMatrix, distCoeffs=None):
     assert len(points3D.shape) == 2 and points3D.shape[0] == 3
     homo2D = np.concatenate([points2D, np.ones((points2D.shape[0],1))], axis=1)
     homo3D = np.concatenate([points3D, np.ones((points3D.shape[0],1))], axis=1)
-    print(homo2D.shape)
-    print(homo3D.shape)
+    #print(homo2D.shape)
+    #print(homo3D.shape)
     Kinv = np.linalg.inv(cameraMatrix)
     v = np.matmul(Kinv, homo2D.T).T
     ### find cosine angle Cab, Cac, Cbc
