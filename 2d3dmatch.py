@@ -3,8 +3,7 @@ import pandas as pd
 import numpy as np
 import cv2
 import time
-
-from p3psolver import p3psolver
+from ransac import RansacSolveP3P
 
 def average_desc(train_df, points3D_df):
     def average(x):
@@ -55,25 +54,8 @@ def main():
         points2D, points3D = get2D3Dcorrespondence((kp_query, desc_query), (kp_model, desc_model))
         #### points2D [num_correspondence, 2]
         #### points3D [num_correspondence, 3]
-        np.save('points2D.npy', points2D)
-        np.save('points3D.npy', points3D)
-        ### p3p solver
-        FinalTs, Rotation_Matrixs = p3psolver(points2D[:3], points3D[:3], cameraMatrix=cameraMatrix, distCoeffs=distCoeffs)
-        ### p3psolver return up to 4 solutions, select the best
-        best_rotation_Matrix = None
-        best_trans = None
-        best_error = np.inf
-        for trans, rotation_Matrix in zip(FinalTs, Rotation_Matrixs):
-            outer = np.matmul(rotation_Matrix, points3D.T).T + trans
-            onimg = np.matmul(cameraMatrix, outer.T).T
-            onimg = onimg / onimg[:,2:]
-            error = abs(onimg[:,:2] - points2D).mean()
-            #print(error.mean())
-            if best_rotation_Matrix is None or error < best_error:
-                best_error = error
-                best_rotation_Matrix = rotation_Matrix
-                best_trans = trans
-        best_quaternion = R.from_matrix(best_rotation_Matrix).as_quat()
+        RansacSolveP3P(points2D, points3D, cameraMatrix, distCoeffs)
+        exit(0)
         ### get ground_truth
         ground_truth = images_df.loc[images_df["IMAGE_ID"] == idx]
         rotq_gt = ground_truth[["QX","QY","QZ","QW"]].values
