@@ -43,8 +43,12 @@ def main():
     
     cameraMatrix = np.array([[1868.27,0,540],[0,1869.18,960],[0,0,1]])    
     distCoeffs = np.array([0.0847023,-0.192929,-0.000201144,-0.000725352])
+
+    valid_idxs = images_df[images_df["NAME"].str.contains("valid")]["IMAGE_ID"].tolist()
+    med_pose_error = []
+    med_quat_error = []
     ### iterate over all validation query images
-    for idx in range(200,230):
+    for idx in valid_idxs:
         ### get 2D query image & 2D descriptors
         rimg, kp_query, desc_query = get2DImgDescriptor(idx, images_df, point_desc_df)
         #### single image shape 1920* 1080
@@ -54,16 +58,23 @@ def main():
         points2D, points3D = get2D3Dcorrespondence((kp_query, desc_query), (kp_model, desc_model))
         #### points2D [num_correspondence, 2]
         #### points3D [num_correspondence, 3]
-        RansacSolveP3P(points2D, points3D, cameraMatrix, distCoeffs)
-        exit(0)
+        ret_Quat, ret_T, _ = RansacSolveP3P(points2D, points3D, cameraMatrix, distCoeffs, n_iter=100, thres=1)
+        
         ### get ground_truth
         ground_truth = images_df.loc[images_df["IMAGE_ID"] == idx]
         rotq_gt = ground_truth[["QX","QY","QZ","QW"]].values
         tvec_gt = ground_truth[["TX","TY","TZ"]].values
         ### calculate error
-        pose_error, rotation_error = calculate_error(best_trans, tvec_gt, best_quaternion, rotq_gt)
+        pose_error, rotation_error = calculate_error(ret_T, tvec_gt, ret_Quat, rotq_gt)
+        print('idx {}----------'.format(idx))
+        print(ret_T, tvec_gt)
+        print(ret_Quat, rotq_gt)
         print('pose_error', pose_error)
         print('rotation_error', rotation_error)
+        med_pose_error.append(pose_error)
+        med_quat_error.append(rotation_error)
+    print('med_pose_error', np.median(np.array(med_pose_error)))
+    print('med_quat_error', np.median(np.array(med_quat_error)))
 
 def calculate_error(pose, gt_pose, quaternion, gt_quaternion):
     def axis_angle_representation(quaternion):
