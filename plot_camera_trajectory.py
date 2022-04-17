@@ -43,6 +43,25 @@ def plot_point_cloud(points3D_df):
     print(np.asarray(pcd.colors))
     return pcd
 
+def parse_gt():
+    def sort_func(x):
+        x = x.str.replace('valid_img','')
+        x = x.str.replace('train_img','')
+        x = x.str.replace('.jpg','').astype(int)
+        return x
+
+    images_df = pd.read_pickle("data/images.pkl")
+    valid_df = images_df[images_df["NAME"].str.contains("valid")]
+    sorted_valid_df = valid_df.sort_values(by='NAME',key=sort_func)
+    print(sorted_valid_df)
+
+    translations = sorted_valid_df[['TX','TY','TZ']].to_numpy()
+    quaternions = sorted_valid_df[["QX","QY","QZ","QW"]].to_numpy()
+    print(translations.shape)
+    print(quaternions.shape)
+    np.save('data/translations.npy', translations)
+    np.save('data/quaternions.npy', quaternions)
+
 def main():
     points3D_df = pd.read_pickle("data/points3D.pkl")
     pcd = plot_point_cloud(points3D_df)
@@ -57,12 +76,8 @@ def main():
 
     ### add points lines
     #o3d.visualization.ViewControl.set_zoom(vis.get_view_control(), 0.8)
-    ### get images extrinsic
-    images_df = pd.read_pickle("data/images.pkl")
-    translations = images_df[['TX','TY','TZ']].to_numpy()
-    quaternions = images_df[["QX","QY","QZ","QW"]].to_numpy()
-    np.save('data/translations.npy', translations)
-    np.save('data/quaternions.npy', quaternions)
+    ### parse ground truth images extrinsic
+    parse_gt()
     regists = [
         ('data/translations.npy', 'data/quaternions.npy', [1.,0.0,0.], [0.,1.0,0.0]),
         ('data/p3p_Trans.npy', 'data/p3p_Quats.npy', [0.,0.,1.0], [1.0,1.0,0.0])
