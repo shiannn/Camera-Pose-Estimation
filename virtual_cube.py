@@ -69,7 +69,8 @@ def project3Dto2D(rotation_Quat, translation, points3D, cameraMatrix):
 
 def main():
     ### get virtual cube
-    cube_vertices = np.load('data/cube_vertices.npy')
+    #cube_vertices = np.load('data/cube_vertices.npy')
+    #cube_transform_mat = np.load('data/cube_transform_mat.npy')
     cube_vertices = np.array([
         [ 0.69,0.          ,0.83      ],
         [ 1.69,0.          ,0.83      ],
@@ -80,7 +81,7 @@ def main():
         [ 0.69,0.19682049  ,2.23045053],
         [ 1.69,0.19682049  ,2.23045053]
     ])
-    cube_transform_mat = np.load('data/cube_transform_mat.npy')
+    cube_vertices[:,2] -= 1
     xyzrgb_grid = get_virtual_cube(cube_vertices)
     ### camera intrinsic matrix
     cameraMatrix = np.array([[1868.27,0,540],[0,1869.18,960],[0,0,1]])
