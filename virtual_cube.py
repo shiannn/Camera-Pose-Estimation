@@ -5,11 +5,45 @@ import pandas as pd
 from scipy.spatial.transform import Rotation as R
 
 def get_virtual_cube(cube_vertices):
+    def getFaces(minx, miny, minz, maxx, maxy, maxz):
+        xarray = np.linspace(minx, maxx, 200)
+        yarray = np.linspace(miny, maxy, 200)
+        zarray = np.linspace(minz, maxz, 200)
+        xygrid_x, xygrid_y  = np.meshgrid(xarray, yarray, indexing='ij')
+        xzgrid_x, xzgrid_z = np.meshgrid(xarray, zarray, indexing='ij')
+        yzgrid_y, yzgrid_z = np.meshgrid(yarray, zarray, indexing='ij')
+
+        xy_face1 = np.stack([xygrid_x, xygrid_y, minz* np.ones_like(xygrid_x)], axis=2)
+        xy_face2 = np.stack([xygrid_x, xygrid_y, maxz* np.ones_like(xygrid_x)], axis=2)
+
+        xz_face1 = np.stack([xzgrid_x, miny* np.ones_like(xzgrid_x), xzgrid_z], axis=2)
+        xz_face2 = np.stack([xzgrid_x, maxy* np.ones_like(xzgrid_x), xzgrid_z], axis=2)
+
+        yz_face1 = np.stack([minx* np.ones_like(yzgrid_y), yzgrid_y, yzgrid_z], axis=2)
+        yz_face2 = np.stack([maxx* np.ones_like(yzgrid_y), yzgrid_y, yzgrid_z], axis=2)
+
+        xyz_cube = np.stack([xy_face1, xy_face2, xz_face1, xz_face2, yz_face1, yz_face2], axis=0)
+
+        ### calculate RGB color
+        rgb_colors = []
+        for color_idx in range(6):
+            #color = np.random.rand(*xy_face1.shape)#* np.ones_like(xy_face1)
+            color = np.ones_like(xy_face1)
+            #print(color.shape)
+            #color[:,:] = np.array([1,1,0])
+            color[:,:] = np.array([color_idx%2,color_idx//2%2,color_idx//2//2%2])
+            rgb_colors.append(color)
+        rgb_colors = np.stack(rgb_colors, axis=0)
+        #print(rgb_colors.shape)
+        xyzrgb_cube = np.concatenate((xyz_cube, rgb_colors), axis=3)
+        return xyzrgb_cube
     print(cube_vertices)
     minx, miny, minz = cube_vertices.min(axis=0)
     maxx, maxy, maxz = cube_vertices.max(axis=0)
     print(minx, miny, minz)
     print(maxx, maxy, maxz)
+    xyzrgb_grid = getFaces(minx, miny, minz, maxx, maxy, maxz)
+    """
     xarray = np.linspace(minx, maxx, 50)
     yarray = np.linspace(miny, maxy, 50)
     zarray = np.linspace(minz, maxz, 50)
@@ -23,6 +57,7 @@ def get_virtual_cube(cube_vertices):
     rgb_grid = np.stack([rgrid, ggrid, bgrid], axis=3)
     
     xyzrgb_grid = np.concatenate((xyz_grid, rgb_grid), axis=3)
+    """
     return xyzrgb_grid
 
 def project3Dto2D(rotation_Quat, translation, points3D, cameraMatrix):
@@ -88,6 +123,7 @@ def main():
         #if abs(new_A - A).mean() > 0:
         writer.write(new_A)
         #cv2.imwrite('video_sequence/{}'.format(row['NAME']), new_A)
+        #exit(0)
         #if idx == 20:
         #    break
     writer.release() 
