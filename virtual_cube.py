@@ -94,8 +94,8 @@ def main():
     print(valid_df)
 
     writer = cv2.VideoWriter(
-        filename='project.avi', apiPreference=0,
-        fourcc=cv2.VideoWriter_fourcc(*'DIVX'), fps=15, frameSize=(1080,1920)
+        filename='virtual_cube_AR.mp4', apiPreference=0,
+        fourcc=cv2.VideoWriter_fourcc(*'mp4v'), fps=15, frameSize=(1080,1920)
     )
     ### sort valid_df['NAME']
     def sort_func(x):
