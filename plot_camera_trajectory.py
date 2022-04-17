@@ -3,7 +3,7 @@ import pandas as pd
 import open3d as o3d
 from scipy.spatial.transform import Rotation as R
 
-def plot_camera_object(Quaternion, Translation, focal_len_scaled=0.5, aspect_ratio=0.3):
+def plot_camera_object(Quaternion, Translation, focal_len_scaled=0.5, aspect_ratio=0.3, color=[1.0,0.,0.]):
     #print(Quaternion, Translation)
     rotation_Matrix = R.from_quat(Quaternion).as_matrix()
     points = np.array([
@@ -18,7 +18,7 @@ def plot_camera_object(Quaternion, Translation, focal_len_scaled=0.5, aspect_rat
     lines = [[0,1],[0,2],[0,3],[0,4],[1,2],[2,3],[3,4],[4,1]]
     #points = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0],[0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]]
     #lines = [[0, 1], [0, 2], [1, 3], [2, 3], [4, 5], [4, 6], [5, 7], [6, 7], [0, 4], [1, 5], [2, 6], [3, 7]]
-    colors = [[1.0,0.,0.] for _ in range(len(lines))]
+    colors = [color for _ in range(len(lines))]
 
     line_set = o3d.geometry.LineSet()
     line_set.points = o3d.utility.Vector3dVector(points)
@@ -63,28 +63,33 @@ def main():
     quaternions = images_df[["QX","QY","QZ","QW"]].to_numpy()
     np.save('data/translations.npy', translations)
     np.save('data/quaternions.npy', quaternions)
-    translations = np.load('data/translations.npy')
-    quaternions = np.load('data/quaternions.npy')
-    
-    trajectory_points = []
-    for quaternion, translation in zip(quaternions[::5], translations[::5]):
-        #translation = row[['TX','TY','TZ']].to_numpy()
-        #quaternion = row[["QX","QY","QZ","QW"]].to_numpy()
-        line_set, trajectory_point = plot_camera_object(quaternion, translation)
-        vis.add_geometry(line_set)
+    regists = [
+        ('data/translations.npy', 'data/quaternions.npy', [1.,0.0,0.], [0.,1.0,0.0]),
+        ('data/p3p_Trans.npy', 'data/p3p_Quats.npy', [0.,0.,1.0], [1.0,1.0,0.0])
+    ]
+    for trans_name, quats_name, color, traj_color in regists:
+        translations = np.load(trans_name)
+        quaternions = np.load(quats_name)
+        
+        trajectory_points = []
+        for quaternion, translation in zip(quaternions[::1], translations[::1]):
+            #translation = row[['TX','TY','TZ']].to_numpy()
+            #quaternion = row[["QX","QY","QZ","QW"]].to_numpy()
+            line_set, trajectory_point = plot_camera_object(quaternion, translation, color=color)
+            vis.add_geometry(line_set)
 
-        trajectory_points.append(trajectory_point)
-    trajectory_points = np.stack(trajectory_points, axis=0)
-    print(trajectory_points)
-    trajectory_lines = np.stack([np.arange(trajectory_points.shape[0]-1), np.arange(1, trajectory_points.shape[0])], axis=1)
+            trajectory_points.append(trajectory_point)
+        trajectory_points = np.stack(trajectory_points, axis=0)
+        print(trajectory_points)
+        trajectory_lines = np.stack([np.arange(trajectory_points.shape[0]-1), np.arange(1, trajectory_points.shape[0])], axis=1)
 
-    camera_trajectory = o3d.geometry.LineSet()    
-    camera_trajectory.points = o3d.utility.Vector3dVector(trajectory_points)
-    camera_trajectory.lines = o3d.utility.Vector2iVector(trajectory_lines)
+        camera_trajectory = o3d.geometry.LineSet()    
+        camera_trajectory.points = o3d.utility.Vector3dVector(trajectory_points)
+        camera_trajectory.lines = o3d.utility.Vector2iVector(trajectory_lines)
 
-    trajectory_colors = [[0.,1.0,0.] for _ in range(trajectory_lines.shape[0])]
-    camera_trajectory.colors = o3d.utility.Vector3dVector(trajectory_colors)
-    vis.add_geometry(camera_trajectory)
+        trajectory_colors = [traj_color for _ in range(trajectory_lines.shape[0])]
+        camera_trajectory.colors = o3d.utility.Vector3dVector(trajectory_colors)
+        vis.add_geometry(camera_trajectory)
     vis.run()
 
 if __name__ == '__main__':

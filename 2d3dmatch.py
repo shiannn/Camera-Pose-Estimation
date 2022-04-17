@@ -33,6 +33,13 @@ def get2DImgDescriptor(idx, images_df, point_desc_df):
     desc_query = np.array(points["DESCRIPTORS"].to_list()).astype(np.float32)
     return rimg, kp_query, desc_query
 
+def sort_func(x):
+    x = x.str.replace('valid_img','')
+    x = x.str.replace('train_img','')
+    x = x.str.replace('.jpg','').astype(int)
+
+    return x
+
 def main():
     ### load data
     train_df, points3D_df, images_df, point_desc_df = load_data()
@@ -44,10 +51,14 @@ def main():
     cameraMatrix = np.array([[1868.27,0,540],[0,1869.18,960],[0,0,1]])    
     distCoeffs = np.array([0.0847023,-0.192929,-0.000201144,-0.000725352])
 
-    valid_idxs = images_df[images_df["NAME"].str.contains("valid")]["IMAGE_ID"].tolist()
+    sorted_valid_df = images_df[images_df["NAME"].str.contains("valid")].sort_values(by='NAME',key=sort_func)
+    valid_idxs = sorted_valid_df["IMAGE_ID"].tolist()
+
     med_pose_error = []
     med_quat_error = []
     ### iterate over all validation query images
+    p3p_Quats = []
+    p3p_Trans = []
     for idx in valid_idxs:
         ### get 2D query image & 2D descriptors
         rimg, kp_query, desc_query = get2DImgDescriptor(idx, images_df, point_desc_df)
@@ -59,7 +70,8 @@ def main():
         #### points2D [num_correspondence, 2]
         #### points3D [num_correspondence, 3]
         ret_Quat, ret_T, _ = RansacSolveP3P(points2D, points3D, cameraMatrix, distCoeffs, n_iter=100, thres=1)
-        
+        p3p_Quats.append(ret_Quat)
+        p3p_Trans.append(ret_T)
         ### get ground_truth
         ground_truth = images_df.loc[images_df["IMAGE_ID"] == idx]
         rotq_gt = ground_truth[["QX","QY","QZ","QW"]].values
@@ -73,6 +85,12 @@ def main():
         print('rotation_error', rotation_error)
         med_pose_error.append(pose_error)
         med_quat_error.append(rotation_error)
+    p3p_Quats = np.stack(p3p_Quats, axis=0)
+    p3p_Trans = np.stack(p3p_Trans, axis=0)
+    print(p3p_Quats)
+    print(p3p_Trans)
+    np.save('data/p3p_Quats.npy', p3p_Quats)
+    np.save('data/p3p_Trans.npy', p3p_Trans)
     print('med_pose_error', np.median(np.array(med_pose_error)))
     print('med_quat_error', np.median(np.array(med_quat_error)))
 
